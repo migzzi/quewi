@@ -67,14 +67,6 @@ export class Queue<T, R = any> {
   }
 
   async enqueue(task: T): Promise<TaskFuture<R>> {
-    // console.log(
-    //   "Enqueueing task",
-    //   task,
-    //   this.queue.length,
-    //   this.maxQueueSize,
-    //   this.concurrency,
-    //   this.activeTasks
-    // );
     const isQueueFull =
       this.maxQueueSize > 0
         ? this.queue.length >= this.maxQueueSize
@@ -123,7 +115,6 @@ export class Queue<T, R = any> {
     const p = new Promise<void>((resolve) => {
       this.onDrain = function () {
         oldOnDrain();
-        console.log("___DRAINED___");
         resolve();
       };
     });
@@ -157,8 +148,8 @@ export class Queue<T, R = any> {
       fut.resolvePromise(res!);
     }
 
-    const hasQueued = this.processQueue();
-    const hasUnblocked = this.processBlocked();
+    this.processQueue();
+    this.processBlocked();
 
     if (this.idle()) {
       this.onDrain();
@@ -195,39 +186,3 @@ export class Queue<T, R = any> {
     return true;
   }
 }
-
-// async function main() {
-//   const worker = async (message: number) => {
-//     console.log("Processing message", message);
-//     console.log("DONE Processing message", message);
-//     return message;
-//   };
-
-//   const queue = new MemQueue(worker, {
-//     concurrency: 5,
-//     maxQueueSize: 5,
-//     onBlocked: (task: number) => console.log("Max queue size reached", task),
-//     onUnblocked: (t, info) =>
-//       console.log(`Task ${t} unblocked. Blocked for ${info.blockingTime}ms`),
-//   });
-
-//   const results: number[] = [];
-//   for (let i = 0; i < 100; i++) {
-//     const fut = await queue.enqueue(i);
-//     fut.getPromise().then((r) => {
-//       console.log("Result", r);
-//       results.push(r);
-//     });
-//   }
-
-//   await queue.drained();
-
-//   console.log("==============");
-//   for (let i = 1; i < results.length; i++) {
-//     if (results[i] < results[i - 1]) {
-//       console.log("!!!! Out of order");
-//     }
-//   }
-// }
-
-// main();
