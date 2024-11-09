@@ -12,7 +12,7 @@ export type QueueOptions<T> = {
   onSaturated?: () => void;
 };
 
-export class Queue<T, R = any> implements IQueue<T, R> {
+export class BaseQueue<T, R = any> implements IQueue<T, R> {
   private queue: {
     task: T;
     fut: TaskFuture<R>;
