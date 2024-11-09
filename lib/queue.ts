@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 const noop = (...args: any[]) => {};
 
-class TaskFuture<T> {
+export class TaskFuture<T> {
   private resolve: (value: T) => void = noop;
   private reject: (reason?: unknown) => void = noop;
   private promise: Promise<T>;
@@ -27,17 +27,26 @@ class TaskFuture<T> {
   }
 }
 
+export type QueueOptions<T> = {
+  concurrency: number;
+  maxQueueSize: number;
+  context?: unknown;
+  onDrain?: () => void;
+  onBlocked?: (t: T) => void;
+  onUnblocked?: (t: T, info: { blockingTime: number }) => void;
+  onSaturated?: () => void;
+};
+
 export class Queue<T, R = any> {
   private queue: {
     task: T;
     fut: TaskFuture<R>;
   }[] = [];
-
   private blockedToEnqueue: { cb: (...args: any) => void }[] = [];
   private concurrency: number;
   private maxQueueSize: number;
   private activeTasks = 0;
-  private state: "running" | "paused" = "running";
+  private _state: "running" | "paused" = "running";
   private worker: (message: T) => Promise<R>;
   private context: unknown;
   private onDrain: () => void = noop;
@@ -45,25 +54,38 @@ export class Queue<T, R = any> {
   private onBlocked: (t: T) => void = noop;
   private onUnblocked: (t: T, info: { blockingTime: number }) => void = noop;
 
+  public readonly name: string | undefined;
+
   constructor(
+    name: string,
     worker: (message: T) => Promise<R>,
-    opts?: {
-      concurrency: number;
-      maxQueueSize: number;
-      context?: unknown;
-      onBlocked?: (t: T) => void;
-      onUnblocked?: (t: T, info: { blockingTime: number }) => void;
-      onSaturated?: () => void;
-    }
+    opts?: QueueOptions<T>
+  );
+
+  constructor(worker: (message: T) => Promise<R>, opts?: QueueOptions<T>);
+
+  constructor(
+    nameOrWorker: string | ((message: T) => Promise<R>),
+    workerOrOpts: ((message: T) => Promise<R>) | QueueOptions<T>,
+    opts?: QueueOptions<T> | undefined
   ) {
-    this.worker = worker;
+    if (typeof nameOrWorker === "string") {
+      this.name = nameOrWorker;
+      this.worker = workerOrOpts as (message: T) => Promise<R>;
+    } else {
+      this.name = "Worker-" + Math.random().toString(36).substring(7);
+      this.worker = nameOrWorker;
+      opts = workerOrOpts as QueueOptions<T>;
+    }
+
     this.concurrency = opts?.concurrency || 1;
     this.maxQueueSize = opts?.maxQueueSize ?? 1;
     this.context = opts?.context ?? {};
     this.onBlocked = opts?.onBlocked ?? noop;
     this.onUnblocked = opts?.onUnblocked ?? noop;
     this.onSaturated = opts?.onSaturated ?? noop;
-    this.state = "running";
+    this.onDrain = opts?.onDrain ?? noop;
+    this._state = "running";
   }
 
   async enqueue(task: T): Promise<TaskFuture<R>> {
@@ -126,17 +148,25 @@ export class Queue<T, R = any> {
   }
 
   pause(): void {
-    this.state = "paused";
+    this._state = "paused";
   }
 
   resume(): void {
-    this.state = "running";
+    this._state = "running";
     this.processQueue();
     this.processBlocked();
   }
 
   idle(): boolean {
     return this.queue.length === 0 && this.activeTasks === 0;
+  }
+
+  get state(): "running" | "paused" {
+    return this._state;
+  }
+
+  isRunning(): boolean {
+    return this._state === "running";
   }
 
   private onTaskDone(fut: TaskFuture<R>, res: R | null, err?: Error): void {
