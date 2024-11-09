@@ -1,31 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
-const noop = (...args: any[]) => {};
-
-export class TaskFuture<T> {
-  private resolve: (value: T) => void = noop;
-  private reject: (reason?: unknown) => void = noop;
-  private promise: Promise<T>;
-
-  constructor() {
-    this.promise = new Promise<T>((resolve, reject) => {
-      this.resolve = resolve;
-      this.reject = reject;
-    });
-  }
-
-  resolvePromise(value: T): void {
-    this.resolve(value);
-  }
-
-  rejectPromise(reason: unknown): void {
-    this.reject(reason);
-  }
-
-  getPromise(): Promise<T> {
-    return this.promise;
-  }
-}
+import { TaskFuture } from "./future";
+import { IQueue } from "./interface";
+import { noop } from "./utils";
 
 export type QueueOptions<T> = {
   concurrency: number;
@@ -37,7 +12,7 @@ export type QueueOptions<T> = {
   onSaturated?: () => void;
 };
 
-export class Queue<T, R = any> {
+export class Queue<T, R = any> implements IQueue<T, R> {
   private queue: {
     task: T;
     fut: TaskFuture<R>;
@@ -214,5 +189,25 @@ export class Queue<T, R = any> {
       });
 
     return true;
+  }
+
+  on(
+    event: "drain" | "blocked" | "unblocked" | "saturated",
+    cb: (...args: any[]) => void
+  ): void {
+    switch (event) {
+      case "drain":
+        this.onDrain = cb;
+        break;
+      case "blocked":
+        this.onBlocked = cb as (t: T) => void;
+        break;
+      case "unblocked":
+        this.onUnblocked = cb as (t: T, info: { blockingTime: number }) => void;
+        break;
+      case "saturated":
+        this.onSaturated = cb;
+        break;
+    }
   }
 }
